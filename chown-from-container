@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+from os import chown
+from os.path import isabs, abspath
+from sys import stdin, stdout, stderr
+from shutil import which
+from subprocess import Popen as Subprocess, PIPE
+from argparse import ArgumentParser
+
+system_streams = {
+    "stdin": stdin,
+    "stdout": stdout,
+    "stderr": stderr,
+}
+
+def run(executable, arguments, streams=system_streams):
+    executable_path = executable
+    if not isabs(executable):
+        executable_path = which(executable)
+
+    return Subprocess(
+        [executable_path] + arguments,
+        **streams
+    )
+
+def id(container, kind, entity):
+    cmd = ["id"]
+    if kind == "user":
+        cmd.append("-u")
+        cmd.append(entity)
+    if kind == "group":
+        cmd.append("-g")
+        cmd.append(entity)
+
+    child = run(
+        "docker",
+        [
+            "run",
+            container,
+            "/bin/bash", "-c", " ".join(cmd) 
+        ],
+        {
+            "stdin": stdin,
+            "stdout": PIPE,
+            "stderr": stderr,
+        }
+    )
+
+    return int(child.communicate()[0])
+
+def main(args):
+    uid, gid = (
+        id(args["container"], kind, args[kind])
+        for kind in ["user", "group"]
+    )
+    chown(
+        abspath(args["object"]),
+        uid,
+        gid
+    )
+
+if __name__ == "__main__":
+    p = ArgumentParser(
+        description=(
+            "It chowns a filesystem object to the "
+            "uid and gid of the user in Docker container"
+        )
+    )
+    p.add_argument(
+        "--container",
+        help="Docker container name(with version)",
+        required=True
+    )
+    p.add_argument(
+        "--user",
+        help="User name inside a Docker container to chown object to",
+        required=True
+    )
+    p.add_argument(
+        "--group",
+        help="Group name inside a Docker container to chown object to",
+        required=True
+    )
+    p.add_argument(
+        "--object",
+        help="File system object(file/directory/etc...) to chown",
+        required=True
+    )
+
+    main(p.parse_args().__dict__)
