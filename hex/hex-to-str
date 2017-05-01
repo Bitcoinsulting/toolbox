@@ -1,11 +1,24 @@
 #!/usr/bin/env python3
+from argparse import ArgumentParser
 from sys import stdin, stdout
+from os.path import abspath, expanduser
 
 empty_string = b""
 new_line     = b"\n"
 
-def hex_to_str():
-    data = stdin.buffer.read().strip()
+def read_file(path):
+    if path == "-":
+        return stdin.buffer.read()
+    fullpath = abspath(
+        expanduser(
+            path
+        )
+    )
+    with open(fullpath, "r") as file:
+        return file.buffer.read()
+
+def hex_to_str(file):
+    data = read_file(file).strip()
     stdout.buffer.write(
         empty_string.join(
             chr(
@@ -23,4 +36,12 @@ def hex_to_str():
     )
 
 if __name__ == "__main__":
-    hex_to_str()
+    p = ArgumentParser(
+        description="Convert hex string representation to raw string"
+    )
+    p.add_argument(
+        "--file",
+        help="File with data(default is stdin)",
+        default="-"
+    )
+    hex_to_str(**p.parse_args().__dict__)
