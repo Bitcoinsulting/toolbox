@@ -22,12 +22,34 @@ def demote(uid, gid):
         )
         raise e
 
-def execute(user, command=[]):
-    entry = getpwnam(user)
+def execute(args):
+    user    = args["user"]
+    command = args["command"]
+    uid     = args["uid"]
+    gid     = args["gid"]
+    source  = args["source"]
+
+    if source == "user":
+        if user == "":
+            raise ValueError(
+                "Empty user name"
+            )
+        entry = getpwnam(user)
+        uid   = entry.pw_uid
+        gid   = entry.pw_gid
+    elif source == "id":
+        if uid < 0 or gid < 0:
+            raise ValueError(
+                "Negative uid or gid is not allowed"
+            )
+    else:
+        raise ValueError(
+            "Unknown source '{}'".format(source)
+        )
 
     demote(
-        entry.pw_uid,
-        entry.pw_gid
+        uid,
+        gid
     )
 
     cmd = command[0]
@@ -52,9 +74,32 @@ if __name__ == "__main__":
     )
 
     p.add_argument(
+        "--source",
+        help=(
+            "Source of data about user. "
+            "You could use either 'user' or 'id'. "
+            "`user` will get uid and gid for user name automatically. "
+            "`id` will require manually specify `--uid` and `--gid`"
+        ),
+        default="user"
+    )
+    p.add_argument(
         "--user",
         help="User name to setuid and setgid from",
-        type=str
+        type=str,
+        default=""
+    )
+    p.add_argument(
+        "--uid",
+        help="User id for setuid",
+        type=int,
+        default=-1
+    )
+    p.add_argument(
+        "--gid",
+        help="Group id for setgid",
+        type=int,
+        default=-1
     )
     p.add_argument(
         "command",
@@ -62,4 +107,4 @@ if __name__ == "__main__":
         nargs="+"
     )
 
-    execute(**p.parse_args().__dict__)
+    execute(p.parse_args().__dict__)
