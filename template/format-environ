@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+from sys import stdin, stdout, stderr
+from os import environ
+from os.path import abspath
+from argparse import ArgumentParser
+from string import Template
+
+def log(*args):
+    stderr.write(" ".join(args) + "\n")
+
+def read_file(path):
+    if path == "-":
+        return stdin.buffer.read()
+    fullpath = abspath(
+        expanduser(
+            path
+        )
+    )
+    with open(fullpath, "r") as file:
+        return file.buffer.read()
+
+def write_file(target, data):
+    if target == "-":
+        stdout.write(data)
+    else:
+        abstarget = abspath(target)
+        with open(abstarget, "w") as file:
+            log("Formatted  {}".format(abstarget))
+            file.write(data)
+
+def format(file, out):
+    write_file(
+        out,
+        Template(
+            read_file(file).decode("utf-8")
+        ).substitute(environ)
+    )
+
+if __name__ == "__main__":
+    p = ArgumentParser(
+        description="Format a file with environment variables(uses python string.Template)"
+    )
+    p.add_argument(
+        "--file",
+        help="Path of a file variables inside which should be expanded",
+        default="-"
+    )
+    p.add_argument(
+        "--out",
+        help="Output to specified file(you could use '-' to print to STDOUT)",
+        default="-",
+        type=str
+    )
+    format(**p.parse_args().__dict__)
