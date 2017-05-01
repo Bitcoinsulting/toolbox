@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+from os.path import abspath, expanduser
+from sys import stdin, stdout, stderr
+from argparse import ArgumentParser
+from hashlib import sha256
+from datetime import datetime
+from time import mktime
+
+"""
+`seed` and `nonce` should be byte buffers.
+`nonce` should be always produced by stream.
+"""
+
+delimiter = b"\0"
+
+class Mixer():
+    def sha256(seed, nonce):
+        h = sha256()
+        h.update(seed)
+        h.update(delimiter)
+        h.update(nonce)
+        return h.hexdigest().encode("utf-8")
+
+class Stream():
+    def day_start_unixtime():
+        now = datetime.now()
+        return str(
+            mktime(
+                datetime(
+                    now.year,
+                    now.month,
+                    now.day
+                ).timetuple()
+            )
+        ).encode("utf-8")
+
+def keys(object):
+    return [
+        field
+        for field in sorted(object.__dict__)
+        if not field.startswith("__") and not field.endswith("__")
+    ]
+
+def invoke(object, field, *args, **kwargs):
+    f = getattr(object, field)
+    if f is None:
+        raise KeyError(
+            "There is no '{}' in '{}' object".format(
+                field,
+                object
+            )
+        )
+    return f(*args, **kwargs)
+
+def read_file(path):
+    if path == "-":
+        return stdin.buffer.read()
+    fullpath = abspath(
+        expanduser(
+            path
+        )
+    )
+    with open(fullpath, "r") as file:
+        return file.buffer.read()
+
+def predictable_stream(seed, stream, mixer, max_length):
+    seed_data = read_file(seed)
+
+    stdout.buffer.write(
+        invoke(
+            Mixer,
+            mixer,
+            seed=seed_data,
+            nonce=invoke(Stream, stream)
+        )[:max_length]
+    )
+    stdout.write("\n")
+
+if __name__ == "__main__":
+    p = ArgumentParser(
+        description="Generate changing keys based on some `--stream` and mixing in with `--mixer`"
+    )
+    p.add_argument(
+        "--seed",
+        help="seed file path(default is stdin)",
+        default="-"
+    )
+    p.add_argument(
+        "--stream",
+        help=(
+            "type of the stream to mix with name to produce different, "
+            "but predictable names for people who knows the seed "
+            "and mixer function, available: {}".format(
+                ", ".join(keys(Stream))
+            )
+        ),
+        default="day_start_unixtime"
+    )
+    p.add_argument(
+        "--mixer",
+        help=(
+            "type of mixer for the name that will read seed, "
+            "stream and produce you some useful output, available: {}".format(
+                ", ".join(keys(Mixer))
+            )
+        ),
+        type=str,
+        default="sha256"
+    )
+    p.add_argument(
+        "--max-length",
+        help="cut result to specified length",
+        type=int,
+        default=10
+    )
+
+    predictable_stream(**p.parse_args().__dict__)
