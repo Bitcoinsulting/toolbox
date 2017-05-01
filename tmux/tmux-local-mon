@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+set -e
+set -x
+
+tmux new-session -d -s 'local-mon' 'journalctl -f | cat -n'
+tmux split-window -v 'htop'
+exec tmux -2 attach -d
