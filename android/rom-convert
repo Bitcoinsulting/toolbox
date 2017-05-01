@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+import sys
+from os.path import expanduser
+
+BLOCK_SIZE = 4096
+
+def parse_transfer_list(stream):
+    data = {
+        "version": int(stream.readline()),
+        "blocks": int(stream.readline()),
+        "commands": []
+    }
+
+    if data["version"] > 1:
+        data["stash"] = {
+            "entries": int(stream.readline()),
+            "blocks": int(stream.readline())
+        }
+
+    for l in stream:
+        command, tail = l.split(" ", 1)
+        checksum, *bounds = [int(v) for v in tail.split(",")]
+
+        if checksum != len(bounds):
+            raise RuntimeError(
+                "Corrupted range bounds found. Length should be {}, but {}".format(
+                    checksum,
+                    len(bounds)
+                )
+            )
+
+        data["commands"].append(
+            {
+                "command": command,
+                "checksum": checksum,
+                "bounds": [
+                    (bounds[k], bounds[k+1])
+                    for k in range(0, len(bounds), 2)
+                ],
+                "min": min(bounds),
+                "max": max(bounds)
+            }
+        )
+    return data
+
+def convert_to(commands, input_stream, output_stream):
+        for v in commands:
+            if v["command"] == "new":
+                for bound in v["bounds"]:
+                    start, end = bound
+                    count = end - start
+                    sys.stderr.write(
+                        "Writing block {} -> {}\n".format(
+                            start,
+                            end
+                        )
+                    )
+                    output_stream.seek(start * BLOCK_SIZE)
+                    output_stream.write(
+                        input_stream.read(count * BLOCK_SIZE)
+                    )
+            else:
+                sys.stderr.write(
+                    "Skipped command '{}'\n".format(
+                        v["command"]
+                    )
+                )
+            sys.stderr.flush()
+
+def convert(transfer_list, system_image):
+    converted_image = "{}.img".format(system_image)
+
+    with open(transfer_list, "r") as stream:
+        transfer_list_data = parse_transfer_list(stream)
+    with open(converted_image, "wb") as output_stream:
+        # Move cursor to upper bound
+        output_stream.seek(
+            max([
+                v["max"]
+                for v in transfer_list_data["commands"]
+            ]) * BLOCK_SIZE - 1
+        )
+        output_stream.write(b"\0")
+
+        with open(system_image, "rb") as input_stream:
+            convert_to(
+                transfer_list_data["commands"],
+                input_stream,
+                output_stream
+            )
+
+        output_stream.flush()
+
+    sys.stderr.write("Wrote image {}\n".format(converted_image))
+    sys.stderr.write(
+        "\n".join(
+            [
+                "",
+                "Now you probably want to do:",
+                "  sudo mount -r -o loop {} /mnt".format(converted_image)
+            ]
+        )
+    )
+
+
+if __name__ == "__main__":
+    from argparse import ArgumentParser
+    p = ArgumentParser()
+    p.add_argument(
+        "transfer_list",
+        help="ROM system.transfer.list that usually shipped inside ROM zip archive"
+    )
+    p.add_argument(
+        "system_image",
+        help="ROM system.new.dat file from zip archive"
+    )
+
+    convert(
+        **{
+            k: expanduser(v)
+            for k, v in p.parse_args().__dict__.items()
+        }
+    )
