@@ -1,0 +1,26 @@
+#!/usr/bin/env python3
+from sys import stdin, stdout
+
+empty_string = b""
+new_line     = b"\n"
+
+def hex_to_str():
+    data = stdin.buffer.read().strip()
+    stdout.buffer.write(
+        empty_string.join(
+            chr(
+                int(
+                    data[x:x+2],
+                    16
+                )
+            ).encode("utf-8")
+            for x in range(
+                    0,
+                    len(data.decode("utf-8")),
+                    2
+            )
+        ) + new_line
+    )
+
+if __name__ == "__main__":
+    hex_to_str()
