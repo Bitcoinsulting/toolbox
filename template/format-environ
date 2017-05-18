@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from sys import stdin, stdout, stderr
 from os import environ
-from os.path import abspath
+from os.path import abspath, expanduser
 from argparse import ArgumentParser
 from string import Template
 
