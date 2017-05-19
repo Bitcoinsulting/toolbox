@@ -1,0 +1,232 @@
+#!/usr/bin/env python3
+from argparse import ArgumentParser
+from subprocess import Popen as Subprocess, PIPE as pipe
+from json import dump as jsondump
+from shutil import which, move
+from sys import stdin, stdout, stderr
+from os import walk, makedirs
+from os.path import isabs, isdir, abspath, expanduser, exists, join as pjoin, dirname
+
+GIT_VCS = "git"
+
+vcs_predicates = {
+    GIT_VCS: lambda directory: exists(pjoin(directory, ".git")) and isdir(pjoin(directory, ".git"))
+}
+
+system_streams = {
+    "stdin" : stdin,
+    "stdout": stdout,
+    "stderr": stderr,
+}
+
+def expand(args):
+    nargs = args.copy()
+    for k in [
+            "source",
+            "target",
+    ]:
+        if nargs.get(k):
+            nargs[k] = abspath(expanduser(nargs[k]))
+
+    return nargs
+
+def run(
+        executable,
+        arguments,
+        streams=system_streams,
+        **kwargs
+):
+    path = executable
+    if not isabs(executable):
+        path = which(executable)
+
+    args = kwargs.copy()
+    for name, stream in streams.items():
+        args[name] = stream
+
+    return Subprocess(
+        [path] + arguments,
+        **args
+    )
+
+def get_projects(directory):
+    res = []
+    for root, _, _ in walk(directory):
+        for _, predicate in vcs_predicates.items():
+            if predicate(root):
+                res.append(root)
+                break
+
+    return sorted(res)
+
+def get_git_project_info(directory):
+    res = {
+        "remotes": {},
+        "remotes_order": []
+    }
+
+    child = run(
+        "git",
+        ["config", "--list"],
+        cwd=directory,
+        streams={"stdin": stdin, "stdout": pipe, "stderr": stderr}
+    )
+    code = child.wait()
+    if code != 0:
+        raise RuntimeError(
+            "{} exited with '{}' code".format(vcs, code)
+        )
+    output, _ = child.communicate()
+
+    for line in output.strip().decode("utf8").split("\n"):
+        if line.startswith("remote."):
+            runes = line.split(".")
+            if len(runes) < 3:
+                continue
+            if not runes[2].startswith("url="):
+                continue
+            res["remotes"][runes[1]] = line.split("=", 1)[1]
+            res["remotes_order"].append(runes[1])
+
+    return res
+
+def get_project_info(directory):
+    res = {}
+
+    for vcs, predicate in vcs_predicates.items():
+        if predicate(directory):
+            res["vcs"] = vcs
+            break
+
+    vcs = res.get("vcs")
+
+    if vcs == GIT_VCS:
+        res.update(
+            get_git_project_info(directory)
+        )
+
+    return res
+
+def uri_to_path(vcs, uri):
+    # HTTP(S) and other URIs with schema
+    if uri.find("://") > 0:
+        uri = uri[uri.find("://")+3:]
+
+    # SSH URI
+    if uri.find("@") < uri.find(":"):
+        uri = uri[uri.find("@")+1:]
+        uri = uri.replace(":", "/", 1)
+
+    if vcs == GIT_VCS:
+        uri = uri.rstrip(".git")
+
+    uri = uri.rstrip("/")
+    uri = uri.lstrip("/")
+
+    return uri
+
+def main(args):
+    projects = []
+    for project in get_projects(args["source"]):
+        project_info = get_project_info(project)
+        if not project_info:
+            stderr.write(
+                "{} skipped, unknown vcs\n".format(
+                    project
+                )
+            )
+            continue
+
+        if len(project_info["remotes_order"]) == 0:
+            stderr.write(
+                "{} skipped, no remotes\n".format(
+                    project
+                )
+            )
+            continue
+
+        project_info["path"] = uri_to_path(
+            project_info["vcs"],
+            project_info["remotes"][
+                project_info["remotes_order"][0]
+            ]
+        )
+
+        stream = stdout
+        if args["debug"]:
+            stream = stderr
+
+        target = pjoin(
+            args["target"],
+            project_info["path"]
+        )
+
+        stream.write(
+            "{} moving to {}\n".format(
+                project,
+                target
+            )
+        )
+        if not args["dry"]:
+            makedirs(
+                dirname(target),
+                exist_ok=True
+            )
+
+            if args["skip_existing"] and exists(target):
+                stderr.write(
+                    "{} skipped, existing target\n".format(
+                        project
+                    )
+                )
+                continue
+
+            move(
+                project,
+                target
+            )
+        project_info["source"] = project
+        project_info["target"] = target
+
+        projects.append(project_info)
+
+    if args["debug"]:
+        jsondump(projects, stdout)
+
+
+
+if __name__ == "__main__":
+    p = ArgumentParser(
+        description="Structurizes your projects"
+    )
+
+    p.add_argument(
+        "source",
+        help="Source directory to scan",
+        type=str
+    )
+    p.add_argument(
+        "target",
+        help="Target directory to copy projects into",
+        type=str
+    )
+    p.add_argument(
+        "--skip-existing",
+        help="Skips if target exists",
+        default=False,
+        action="store_true"
+    )
+    p.add_argument(
+        "--dry",
+        help="Move nothing, only show what will be moved",
+        default=False,
+        action="store_true"
+    )
+    p.add_argument(
+        "--debug",
+        help="Debug mode",
+        default=False,
+        action="store_true"
+    )
+
+    main(expand(p.parse_args().__dict__))
