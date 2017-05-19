@@ -19,6 +19,12 @@ system_streams = {
     "stderr": stderr,
 }
 
+def remove_suffix(s, suffix):
+    pos = s.rfind(suffix)
+    if pos > -1:
+        return s[:pos]
+    return s
+
 def expand(args):
     nargs = args.copy()
     for k in [
@@ -118,7 +124,7 @@ def uri_to_path(vcs, uri):
         uri = uri.replace(":", "/", 1)
 
     if vcs == GIT_VCS:
-        uri = uri.rstrip(".git")
+        uri = remove_suffix(uri, ".git")
 
     uri = uri.rstrip("/")
     uri = uri.lstrip("/")
