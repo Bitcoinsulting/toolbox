@@ -13,6 +13,20 @@ system_streams = {
     "stderr": stderr,
 }
 
+def update_environ(parameters):
+    update = {}
+    for pair in parameters:
+        k, v = pair.split("=", 1)
+        update[k] = v
+        stderr.write(
+            "Adding {}={} to environment\n".format(
+                k,
+                v
+            )
+        )
+
+    environ.update(update)
+
 def run(executable, arguments=[], streams=system_streams, environ=environ):
     path = executable
     if not isabs(executable):
@@ -135,4 +149,6 @@ if __name__ == "__main__":
         help="Base container"
     )
 
-    main(p.parse_args().__dict__)
+    args, rest = p.parse_known_args()
+    update_environ(rest)
+    main(args.__dict__)
