@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+from argparse import ArgumentParser
+from sys import stdin, stdout
+
+def main(args):
+    lines = [
+        s.rstrip()
+        for s in stdin
+    ]
+
+    ws      = args["whitespace"]
+    sep     = args["separator"]
+    repeat  = int(args["repeat"])
+    longest = max(list(map(len, lines)))
+
+    stdout.write(
+        "\n".join(
+            [
+                (
+                    lambda v:            \
+                    (v+sep)*repeat       \
+                    if len(v) == longest \
+                    else (
+                            v+(ws*(longest-len(v)))+sep
+                    )*repeat
+                )(v)
+                for v in lines
+            ]
+        ) + "\n"
+    )
+
+
+if __name__ == "__main__":
+    p = ArgumentParser(
+        description=(
+            "Repeat line from stdin N times"
+        )
+    )
+    p.add_argument(
+        "repeat",
+        help="How many times to repeat each line"
+    )
+    p.add_argument(
+        "--whitespace",
+        default=" ",
+        help="Whitespace character"
+    )
+    p.add_argument(
+        "--separator",
+        default=" ",
+        help="Column separator"
+    )
+    main(p.parse_args().__dict__)
