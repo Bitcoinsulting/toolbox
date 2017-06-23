@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+from argparse import ArgumentParser
+
+def apply_fee(amount, fee):
+    percent = False
+    if fee.endswith("%"):
+        percent = True
+        fee = fee.rstrip("%")
+    if percent:
+        return amount - (amount * (float(fee)/100))
+    return amount - float(fee)
+
+def main(args):
+    buy = apply_fee(
+        args["buy_funds"] / args["buy_price"],
+        args["buy_fee"]
+    )
+    sell = apply_fee(
+        buy * args["sell_price"],
+        args["sell_fee"]
+    )
+    print("Buy:", buy)
+    print("Sell:", sell)
+    print("Profit:", sell - args["buy_funds"])
+
+
+if __name__ == "__main__":
+    p = ArgumentParser()
+    p.add_argument(
+        "--buy-funds",
+        required=True,
+        type=float,
+        help="Amount of funds to convert into currency at --buy-price"
+    )
+    p.add_argument(
+        "--buy-price",
+        required=True,
+        type=float,
+        help="Buy price"
+    )
+    p.add_argument(
+        "--buy-fee",
+        default="0",
+        type=str,
+        help=(
+            "Market fee, could be fixed or percent from conversion amount"
+            "(to use percent append '%' to the value)"
+        )
+    )
+
+    p.add_argument(
+        "--sell-price",
+        required=True,
+        type=float,
+        help="Sell price"
+    )
+    p.add_argument(
+        "--sell-fee",
+        default="0",
+        type=str,
+        help=(
+            "Market fee, could be fixed or percent from conversion amount"
+            "(to use percent append '%' to the value)"
+        )
+    )
+
+    main(p.parse_args().__dict__)
