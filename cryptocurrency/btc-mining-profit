@@ -1,22 +1,51 @@
 #!/usr/bin/env python3
 from argparse import ArgumentParser
 from urllib.request import Request, urlopen
+from re import split
+
+units = {
+    "Y": 10**24,
+    "Z": 10**21,
+    "E": 10**18,
+    "P": 10**15,
+    "T": 10**12,
+    "G": 10**9,
+    "M": 10**6,
+    "k": 10**3,
+}
 
 def get(url):
     return urlopen(Request(url)).read()
 
 def expand(args):
     nargs = args.copy()
+    if not args["hashrate"].isnumeric():
+        nargs["hashrate"] = args["hashrate"].rstrip("/s")
+        nargs["hashrate"] = args["hashrate"].rstrip("H").rstrip("h")
+        value, unit = [
+            x
+            for x in split(
+                    "^([\d\.]+)([^\d]*)$",
+                    nargs["hashrate"]
+            )
+            if x
+        ]
+        if unit not in units:
+            raise KeyError("Unknown unit '{}'".format(unit))
+        nargs["hashrate"] = float(value) / units[unit]
+    else:
+        nargs["hashrate"] = float(nargs["hashrate"])
+
     if args["difficulty"] == 0:
-        args["difficulty"] = float(
+        nargs["difficulty"] = float(
             get("https://blockchain.info/q/getdifficulty").decode("utf8")
         )
     if args["reward_per_block"] == 0:
-        args["reward_per_block"] = float(
+        nargs["reward_per_block"] = float(
             get("https://blockchain.info/q/bcperblock").decode("utf8")
         )
 
-    return args
+    return nargs
 
 def main(args):
     identifier = "bitcoins-per-month = "
@@ -61,9 +90,10 @@ if __name__ == "__main__":
     p.add_argument(
         "--hashrate",
         required=True,
-        type=float,
+        type=str,
         help=(
             "Amount of hashes per second you hardware could check. "
+            "You could use values like `1234MH/s`, `1234MH`, `1234 MH` or just `1234` here. "
             "See: https://en.bitcoin.it/wiki/Hashrate"
         )
     )
