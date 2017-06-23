@@ -44,7 +44,7 @@ if __name__ == "__main__":
         type=str,
         help=(
             "Market fee, could be fixed or percent from conversion amount"
-            "(to use percent append '%' to the value)"
+            "(to use percent append '%%' to the value)"
         )
     )
 
@@ -60,7 +60,7 @@ if __name__ == "__main__":
         type=str,
         help=(
             "Market fee, could be fixed or percent from conversion amount"
-            "(to use percent append '%' to the value)"
+            "(to use percent append '%%' to the value)"
         )
     )
 
