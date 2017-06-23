@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+from argparse import ArgumentParser
+from urllib.request import Request, urlopen
+
+def get(url):
+    return urlopen(Request(url)).read()
+
+def expand(args):
+    nargs = args.copy()
+    if args["difficulty"] == 0:
+        args["difficulty"] = float(
+            get("https://blockchain.info/q/getdifficulty").decode("utf8")
+        )
+    if args["reward_per_block"] == 0:
+        args["reward_per_block"] = float(
+            get("https://blockchain.info/q/bcperblock").decode("utf8")
+        )
+
+    return args
+
+def main(args):
+    identifier = "bitcoins-per-month = "
+    print(
+        identifier +
+        (
+            "(days-per-month * reward-per-block * hashrate * seconds-per-dat)"
+            " / "
+            "(difficulty * difficulty-offset)"
+        )
+    )
+    print(
+        identifier +
+        (
+            "({days_per_month} * {reward_per_block} * {hashrate} * {seconds_per_day})"
+            " / "
+            "({difficulty} * {difficulty_offset})"
+        ).format(**args)
+    )
+    print(
+        identifier +
+        str(
+            (args["days_per_month"] * args["reward_per_block"] * args["hashrate"] * args["seconds_per_day"]) /
+            (args["difficulty"] * args["difficulty_offset"])
+        )
+    )
+
+if __name__ == "__main__":
+    p = ArgumentParser()
+    p.add_argument(
+        "--days-per-month",
+        type=int,
+        default=30,
+        help="Number of days in each month"
+    )
+    p.add_argument(
+        "--reward-per-block",
+        type=float,
+        default=0,
+        help="Current network reward for each found block"
+    )
+    p.add_argument(
+        "--hashrate",
+        required=True,
+        type=float,
+        help=(
+            "Amount of hashes per second you hardware could check. "
+            "See: https://en.bitcoin.it/wiki/Hashrate"
+        )
+    )
+    p.add_argument(
+        "--seconds-per-day",
+        type=int,
+        default=60*60*24,
+        help="Number of seconds in each day"
+    )
+    p.add_argument(
+        "--difficulty",
+        type=float,
+        default=0,
+        help=(
+            "Measure of how difficult it is to find "
+            "a hash below a given target. "
+            "See: https://en.bitcoin.it/wiki/Difficulty"
+        )
+    )
+    p.add_argument(
+        "--difficulty-offset",
+        type=int,
+        default=(2**48/0xffff),
+        help=(
+            "See: https://en.bitcoin.it/wiki/Difficulty"
+            "#What_network_hash_rate_results_in_a_given_difficulty.3F"
+        )
+    )
+
+    main(
+        expand(
+            p.parse_args().__dict__
+        )
+    )
