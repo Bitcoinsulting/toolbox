@@ -32,7 +32,7 @@ def expand(args):
         ]
         if unit not in units:
             raise KeyError("Unknown unit '{}'".format(unit))
-        nargs["hashrate"] = float(value) / units[unit]
+        nargs["hashrate"] = float(value) * units[unit]
     else:
         nargs["hashrate"] = float(nargs["hashrate"])
 
@@ -41,9 +41,12 @@ def expand(args):
             get("https://blockchain.info/q/getdifficulty").decode("utf8")
         )
     if args["reward_per_block"] == 0:
+        # All bitcoin values are in Satoshi
+        # i.e. divide by 100000000 to get the amount in BTC.
+        # see: https://blockchain.info/q
         nargs["reward_per_block"] = float(
             get("https://blockchain.info/q/bcperblock").decode("utf8")
-        )
+        ) / 100000000.0
 
     return nargs
 
@@ -60,9 +63,9 @@ def main(args):
     print(
         identifier +
         (
-            "({days_per_month} * {reward_per_block} * {hashrate} * {seconds_per_day})"
+            "({days_per_month} * {reward_per_block:.10f} * {hashrate:.10f} * {seconds_per_day})"
             " / "
-            "({difficulty} * {difficulty_offset})"
+            "({difficulty:.10f} * {difficulty_offset:.10f})"
         ).format(**args)
     )
     print(
