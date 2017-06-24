@@ -19,9 +19,9 @@ def get(url):
 
 def expand(args):
     nargs = args.copy()
-    if not args["hashrate"].isnumeric():
-        nargs["hashrate"] = args["hashrate"].rstrip("/s")
-        nargs["hashrate"] = args["hashrate"].rstrip("H").rstrip("h")
+    if not nargs["hashrate"].isnumeric():
+        nargs["hashrate"] = nargs["hashrate"].rstrip("/s")
+        nargs["hashrate"] = nargs["hashrate"].rstrip("H").rstrip("h")
         value, unit = [
             x
             for x in split(
@@ -36,11 +36,11 @@ def expand(args):
     else:
         nargs["hashrate"] = float(nargs["hashrate"])
 
-    if args["difficulty"] == 0:
+    if nargs["difficulty"] == 0:
         nargs["difficulty"] = float(
             get("https://blockchain.info/q/getdifficulty").decode("utf8")
         )
-    if args["reward_per_block"] == 0:
+    if nargs["reward_per_block"] == 0:
         # All bitcoin values are in Satoshi
         # i.e. divide by 100000000 to get the amount in BTC.
         # see: https://blockchain.info/q
