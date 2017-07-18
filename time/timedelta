@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+
+import datetime
+import sys
+from select import select
+
+if len(sys.argv) < 2:
+    print("""
+
+    Usage:
+    {0} days=1,hours=2,minutes=15
+
+    Actualy each parameter just passthroug as argument to this python function
+    https://docs.python.org/3/library/datetime.html#datetime.timedelta
+
+    Also you could pass into stdin('date +%s | {0} hours=2') base unix timestamp to count delta from.
+
+    """.format(sys.argv[0]))
+    sys.exit(1)
+
+opts = {
+    k:int(v)
+    for k, v in map(lambda x: x.split("="), sys.argv[1].split(","))
+}
+
+
+# timeout to read from stdin
+timeout = 0.1
+rlist, _,_ = select([sys.stdin], [], [], timeout)
+
+pipe = None
+if rlist:
+    pipe = sys.stdin.read()
+else:
+    pipe = None
+
+base = None
+if pipe is not None:
+    base = datetime.datetime.fromtimestamp(int(pipe.strip()))
+else:
+    base = datetime.datetime.now()
+
+yesterday = base - datetime.timedelta(**opts)
+unix_time = yesterday.strftime("%s")
+sys.stdout.write("%s\n" % str(unix_time))
