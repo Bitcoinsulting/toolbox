@@ -1,0 +1,235 @@
+#!/usr/bin/env python3
+
+import subprocess
+import argparse
+import logging
+import shlex
+import time
+import signal
+import subprocess
+import os
+import sys
+
+logging.basicConfig()
+log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
+
+class Wabbit(object):
+
+    keys = {
+        "hardware_address": "802-11-wireless.cloned-mac-address",
+    }
+
+    def __init__(self, id):
+        self.id = id
+
+    def nmcli(self, object, operation, args=[]):
+        p = execute(
+            "nmcli",
+            [object, operation] + args,
+            stdout=subprocess.PIPE
+        )
+
+        return p.communicate()[0].strip().split(b"\n")
+
+    def connection(self, operation, args=[]):
+        return self.nmcli(
+            "connection",
+            operation,
+            args=args
+        )
+
+    def is_active(self):
+        return len(self.connection(
+            "show",
+            ["--active", self.id]
+        )[1:]) > 0
+
+    def up(self):
+        self.connection("up", [self.id])
+        while not self.is_active():
+            log.info("Waiting for '{}' to go up...".format(self.id))
+            time.sleep(1)
+        log.info("Activated '{}'".format(self.id))
+
+    def down(self):
+        self.connection("down", [self.id])
+        while self.is_active():
+            log.info("Waiting for '{}' to go down...".format(self.id))
+            time.sleep(1)
+        log.info("Deactivated '{}'".format(self.id))
+
+    def get_configuration(self):
+        return dict(
+            KeyValueParser().parse(
+                self.connection("show", [self.id])
+            )
+        )
+
+    def get_hardware_address(self):
+        return self.get_configuration().get(
+            self.keys["hardware_address"],
+            ""
+        ).lower()
+
+    def set_hardware_address(self, raw_address):
+        current = self.get_hardware_address()
+        log.info(
+            "Current hardware address of '{}' is '{}'".format(
+                self.id,
+                current
+            )
+        )
+
+        address = raw_address.lower()
+        log.info(
+            "Altering hardware address of '{}' to '{}'".format(
+                self.id,
+                address
+            )
+        )
+        self.connection(
+            "modify",
+            [
+                self.id,
+                self.keys["hardware_address"],
+                address
+            ]
+        )
+
+class KeyValueParser(object):
+
+    def __init__(self, delimiter=b":"):
+        self.delimiter = delimiter
+
+    def unquote(self, string):
+        r = shlex.split(string.decode("utf-8"))
+        if len(r) == 0:
+            return None
+        return " ".join(r)
+
+    def parse(self, lines):
+        for raw_line in lines:
+            line = raw_line.strip()
+            delimiter_position = line.find(self.delimiter)
+            if delimiter_position == 0:
+                raise KeyError(
+                    (
+                        "Key could not start with '{}' because"
+                        "this character delimits key from value"
+                    ).format(self.delimiter)
+                )
+            if delimiter_position > -1:
+                key = self.unquote(line[:delimiter_position].strip())
+                value = self.unquote(line[delimiter_position+1:].strip())
+                if key and value:
+                    yield (key, value)
+
+def execute(
+        cmd,
+        args=[],
+        stdin=sys.stdin,
+        stdout=sys.stdout,
+        stderr=sys.stderr
+):
+    return subprocess.Popen(
+        [cmd] + args,
+        stdin=stdin,
+        stdout=stdout,
+        stderr=stderr
+    )
+
+def initialize_logger(args):
+    log_level = getattr(logging, args["log_level"].upper())
+    log.setLevel(log_level)
+
+def space_separated_values(line):
+    return [
+        item
+        for item in line.strip().split(b"\s")
+        if item != b""
+    ]
+
+def random_byte():
+    with open("/dev/random", "r") as file:
+        return ord(file.buffer.read(1))
+
+def random_value(values=[]):
+    r = random_byte()
+    if r > 0:
+        r = r - 1
+    return values[r % len(values)]
+
+def get_file_data(path):
+    if path == "-":
+        return sys.stdin.read()
+    with open(
+            os.path.abspath(
+                os.path.expanduser(path)
+            ),
+            "r"
+    ) as file:
+        return file.read()
+
+def main(args):
+    initialize_logger(args)
+    log.debug("Got arguments '{}'".format(args))
+
+    w = Wabbit(args["connection"])
+
+    hardware_addresses_from = args["hardware_addresses_from"]
+    desired_state = args["state"]
+
+    if hardware_addresses_from:
+        state = w.is_active()
+        if state == True:
+            w.down()
+
+        current_hardware_address = w.get_hardware_address()
+        addresses = list(
+            set(
+                get_file_data(
+                    hardware_addresses_from
+                ).strip().split("\n")
+            ) - set([current_hardware_address])
+        )
+        log.debug("Available addresses '{}'".format(addresses))
+
+        w.set_hardware_address(
+            random_value(addresses)
+        )
+        if not desired_state and state == True:
+            w.up()
+
+    if desired_state == "up":
+        w.up()
+    if desired_state == "down":
+        w.down()
+
+if __name__ == "__main__":
+    p = argparse.ArgumentParser()
+    p.add_argument(
+        "connection",
+        type=str,
+        help="Connection name or UUID"
+    )
+    p.add_argument(
+        "--log-level",
+        help="Log verbosity level",
+        default="info"
+    )
+    p.add_argument(
+        "--hardware-addresses-from",
+        "-a",
+        help="Path to the file with hardware addresses to apply to the connection",
+        type=str,
+        default=""
+    )
+    p.add_argument(
+        "--state",
+        help="Change a network state to specified",
+        type=str,
+        default=""
+    )
+
+    main(p.parse_args().__dict__)
