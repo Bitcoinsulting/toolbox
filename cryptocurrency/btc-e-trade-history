@@ -9,7 +9,7 @@ from hashlib import sha512
 from hmac import new as hmac
 
 params = {
-    "tradehistory": [
+    "trade_history": [
         "from",
         "count",
         "from_id",
@@ -36,7 +36,7 @@ def main(args):
             **{
                 k: v
                 for k, v in args.items()
-                if k in params["tradehistory"] and bool(v)
+                if k in params["trade_history"] and bool(v)
             }
         )
     )
