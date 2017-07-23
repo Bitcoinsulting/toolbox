@@ -1,0 +1,275 @@
+#!/usr/bin/env python3
+from argparse import ArgumentParser
+from json import dump as json_marshal, dumps as json_marshal_str, loads as json_unmarshal_str
+from sys import stdin, stdout, stderr
+from http.client import HTTPSConnection
+from urllib.parse import urlencode
+from datetime import datetime
+from hashlib import sha512
+from hmac import new as hmac
+
+params = {
+    "tradehistory": [
+        "from",
+        "count",
+        "from_id",
+        "end_id",
+        "order",
+        "since",
+        "end",
+        "pair"
+    ]
+}
+
+def main(args):
+    api = API(
+        args["key"],
+        args["secret"],
+        args["nonce"]
+    )
+
+    presenter = Presenter(args["presenter"])
+
+    presenter.show(
+        "trade_history",
+        api.trade_history(
+            **{
+                k: v
+                for k, v in args.items()
+                if k in params["tradehistory"] and bool(v)
+            }
+        )
+    )
+
+class Request(object):
+    headers = {
+        "Accept": "application/json",
+        "Accept-Charset": "utf-8",
+        "Cache-Control": "no-cache",
+    }
+
+    def __init__(self, host="btc-e.nz", timeout=15):
+        self.host = host
+        self.timeout = timeout
+
+    def send(self, url, method, body, headers={}):
+        request_headers = Request.headers.copy()
+        request_headers.update(headers)
+
+        connection = HTTPSConnection(
+            self.host,
+            timeout=self.timeout
+        )
+        connection.request(
+                method,
+                url,
+                body=body,
+                headers=request_headers
+            )
+        res = connection.getresponse()
+
+        return res
+
+class API(object):
+    def __init__(self, key, secret, nonce):
+        self.request = Request()
+        self.key = key
+        self.secret = secret
+        self.nonce_base = nonce
+
+    def sign(self, body):
+        return hmac(
+            bytes(self.secret, "utf-8"),
+            msg=bytes(body, "utf-8"),
+            digestmod=sha512
+        ).hexdigest()
+
+    def nonce(self, base):
+        return base+1
+
+    def wrap(self, nonce, data):
+        return {
+            "nonce": nonce,
+            "data": data,
+        }
+
+    def trade_history(self, **kwargs):
+        nonce = self.nonce(self.nonce_base)
+        params = {
+            "method": "TradeHistory",
+            "nonce": nonce,
+        }
+        params.update(kwargs)
+
+        body = urlencode(params)
+        headers = {
+            "Key": self.key,
+            "Sign": self.sign(body),
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
+
+        response = self.request.send(
+            "/tapi",
+            "POST",
+            body,
+            headers
+        )
+
+        result = self.wrap(
+            nonce,
+            json_unmarshal_str(
+                response.read().decode("utf-8")
+            )
+        )
+
+        response.close()
+        return result
+
+
+class Presenter(object):
+    class JSON(object):
+        def show(self, data):
+            json_marshal(
+                data,
+                stdout,
+                ensure_ascii=False,
+                sort_keys=True
+            )
+            stdout.write("\n")
+    class Org(object):
+        def humanize_value(self, v):
+            vv = v.copy()
+            vv["date"] = datetime.fromtimestamp(
+                vv["timestamp"]
+            ).strftime("<%Y-%m-%d %a>")
+            vv["operation"] = "+" if vv["type"] == "sell" else "-"
+            vv["from"] = vv["pair"].split("_")[0]
+            vv["to"] = vv["pair"].split("_")[1]
+            return vv
+
+        def show(self, data):
+            if data["payload"]["data"]["success"] == 0:
+                stderr.write(str(data["payload"]) + "\n")
+                return
+
+            data = sorted(
+                [v for _, v in data["payload"]["data"]["return"].items()],
+                key=lambda v: v["timestamp"]
+            )
+
+            groups = {}
+            for v in data:
+                vv = self.humanize_value(v)
+                if vv["pair"] not in groups:
+                    groups[vv["pair"]] = []
+                groups[vv["pair"]].append(vv)
+
+            for k, v in groups.items():
+                stdout.write("\n")
+                stdout.write("#+NAME: {}\n".format(k))
+                stdout.write(
+                    (
+                        "| Date | Pair | Amount | Rate |"
+                        "\n"
+                        "|------+------+--------+------|"
+                        "\n"
+                    )
+                )
+                for vv in v:
+                    stdout.write(
+                        "| {date} | {pair} | {operation}{amount} | {rate} |\n".format(**vv)
+                    )
+
+    presenters = {
+        "json": JSON,
+        "org": Org,
+    }
+
+    def __init__(self, presenter):
+        name = presenter.lower().strip()
+        if name not in self.presenters:
+            raise KeyError(
+                "Unsupported presenter '{}'".format(
+                    name
+                )
+            )
+        self.presenter = self.presenters[name]()
+
+    def show(self, type, payload):
+        return self.presenter.show({
+            "type": type,
+            "payload": payload
+        })
+
+
+if __name__ == "__main__":
+    p = ArgumentParser()
+    p.add_argument(
+        "--key",
+        required=True,
+        type=str,
+        help="Btc-e API key"
+    )
+    p.add_argument(
+        "--secret",
+        required=True,
+        type=str,
+        help="Btc-e API secret"
+    )
+    p.add_argument(
+        "--nonce",
+        required=True,
+        type=int,
+        help="Btc-e API nonce base"
+    )
+
+    p.add_argument(
+        "--from",
+        type=int,
+        help="Trade ID, from which the display starts"
+    )
+    p.add_argument(
+        "--count",
+        type=int,
+        help="The number of trades for display"
+    )
+    p.add_argument(
+        "--from-id",
+        type=int,
+        help="Trade ID, from which the display starts"
+    )
+    p.add_argument(
+        "--end-id",
+        type=int,
+        help="Trade ID on which the display ends"
+    )
+    p.add_argument(
+        "--order",
+        type=str,
+        help="Sorting, asc or desc"
+    )
+    p.add_argument(
+        "--since",
+        type=int,
+        help="The time to start the display"
+    )
+    p.add_argument(
+        "--end",
+        type=int,
+        help="The time to end the display"
+    )
+    p.add_argument(
+        "--pair",
+        type=str,
+        help="Pair to be displayed"
+    )
+
+    p.add_argument(
+        "--presenter",
+        help="Output presenter, available are: {}".format(
+            [k for k, _ in Presenter.presenters.items()]
+        ),
+        default="json"
+    )
+
+    main(p.parse_args().__dict__)
