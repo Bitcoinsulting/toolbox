@@ -142,7 +142,7 @@ class Presenter(object):
             vv["date"] = datetime.fromtimestamp(
                 vv["timestamp"]
             ).strftime("<%Y-%m-%d %a>")
-            vv["operation"] = "+" if vv["type"] == "sell" else "-"
+            vv["operation"] = "-" if vv["type"] == "sell" else "+"
             vv["from"] = vv["pair"].split("_")[0]
             vv["to"] = vv["pair"].split("_")[1]
             return vv
