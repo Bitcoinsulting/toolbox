@@ -2,6 +2,7 @@
 from argparse import ArgumentParser
 from sys import stdin, stdout
 from os.path import abspath, expanduser
+from binascii import hexlify
 
 empty_string = b""
 new_line     = b"\n"
@@ -17,22 +18,10 @@ def read_file(path):
     with open(fullpath, "r") as file:
         return file.buffer.read()
 
-def hex_to_str(file):
+def str_to_hex(file):
     data = read_file(file).strip()
     stdout.buffer.write(
-        empty_string.join(
-            chr(
-                int(
-                    data[x:x+2],
-                    16
-                )
-            ).encode("utf-8")
-            for x in range(
-                    0,
-                    len(data.decode("utf-8")),
-                    2
-            )
-        ) + new_line
+        hexlify(data) + new_line
     )
 
 if __name__ == "__main__":
@@ -44,4 +33,4 @@ if __name__ == "__main__":
         help="File with data(default is stdin)",
         default="-"
     )
-    hex_to_str(**p.parse_args().__dict__)
+    str_to_hex(**p.parse_args().__dict__)
