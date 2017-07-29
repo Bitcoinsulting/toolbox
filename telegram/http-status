@@ -1,0 +1,199 @@
+#!/usr/bin/env python3
+
+"""
+Example:
+$ bwrap                                                              \
+     --ro-bind   /                             /                     \
+     --bind      `pwd`                         /home/$USER           \
+     --proc      /proc                                               \
+     --dev       /dev                                                \
+     --share-net                                                     \
+     ./http-status                                                   \
+         --peers 'user#654321' 'channel#123456'                      \
+         --timeout 10                                                \
+         --address http://example.com
+"""
+
+from argparse import ArgumentParser
+from hashlib import sha1
+from json import dumps as json_marshal_str
+from subprocess import Popen as Subprocess, PIPE as pipe
+from http.client import HTTPSConnection
+from http.client import HTTPConnection
+from sys import stdin, stdout, stderr
+from shutil import which
+from hashlib import sha1
+from os.path import isabs
+from time import time, sleep
+from tempfile import NamedTemporaryFile
+
+subprocess_streams = {
+    "stdin" : stdin,
+    "stdout": stderr,
+    "stderr": stderr,
+}
+
+def run(executable, arguments, streams=subprocess_streams, **kwargs):
+    path = executable
+    if not isabs(executable):
+        path = which(executable)
+
+    nkwargs = kwargs.copy()
+    nkwargs.update(streams)
+    return Subprocess(
+        [path] + arguments,
+        **nkwargs
+    )
+
+def identify(s):
+    hash = sha1()
+    if type(s) is not bytes:
+        s = s.encode("utf-8")
+    hash.update(s)
+    return hash.hexdigest()
+
+def get_connection(address):
+    if address.split(":")[0] == "http":
+        return HTTPConnection
+    return HTTPSConnection
+
+def notify(peers, message):
+    with NamedTemporaryFile() as stream:
+        stream.write(message.encode("utf-8"))
+        stream.seek(0)
+
+        for peer in peers:
+            run(
+                "telegram-cli",
+                [
+                    "--log-level", "0",
+                    "--verbosity", "0",
+                    "--wait-dialog-list",
+                    "--disable-link-preview",
+                    "--disable-colors",
+                    "--disable-readline",
+                    "--exec",
+                    "send_text {0} {1}".format(
+                        peer,
+                        stream.name
+                    ),
+                ]
+            ).wait()
+
+def check(address, timeout=0, status_store={}):
+    connection = get_connection(address)(
+        address.split("://")[1],
+        timeout=timeout
+    )
+
+    status = status_store.copy()
+
+    try:
+        connection.request(
+            "GET",
+            "/"
+        )
+        res = connection.getresponse()
+
+        status["code"] = res.status
+        status["body_hash"] = identify(res.read())
+    except Exception as e:
+        status["exception"] = str(e)
+
+    changes = []
+    for k, v in status.items():
+        if status_store[k] != v:
+            changes.append(
+                {
+                    "key": k,
+                    "old_value": status_store[k],
+                    "new_value": v
+                }
+            )
+    status_store.update(status)
+
+    return bool(len(changes)), changes
+
+
+def main(args):
+    stderr.write(
+        json_marshal_str(
+            args,
+            ensure_ascii=False,
+            sort_keys=True,
+            indent=4
+        ) + "\n\n"
+    )
+    status_store = {
+        "code": 0,
+        "body_hash": "",
+        "exception": ""
+    }
+
+    first_tick = True
+
+    while True:
+        try:
+            changed, changes = check(
+                args["address"],
+                timeout=args["timeout"],
+                status_store=status_store,
+            )
+            if changed:
+                if first_tick:
+                    first_tick = False
+                    continue
+
+                message = json_marshal_str(
+                    {
+                        "args": args,
+                        "changes": changes
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    indent=4
+                )
+                stderr.write(
+                    "Status change: " + message + "\n"
+                )
+                notify(
+                    args["peers"],
+                    message
+                )
+        except Exception as e:
+            print(
+                "Exception occurred",
+                e
+            )
+        finally:
+            sleep(args["tick"])
+
+
+
+if __name__ == "__main__":
+    p = ArgumentParser()
+    p.add_argument(
+        "--peers",
+        required=True,
+        help="List of people or chats to notify with telegram-cli about status changes",
+        nargs="+"
+    )
+    p.add_argument(
+        "--address",
+        required=True,
+        help="Address to check"
+    )
+    p.add_argument(
+        "--tick",
+        help="Check threshold in seconds",
+        type=int,
+        default=60
+    )
+    p.add_argument(
+        "--timeout",
+        help="Timeout in seconds for individual request",
+        type=int,
+        default=15
+    )
+
+    main(p.parse_args().__dict__)
