@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -e
+
+bwrap_args=()
+app_args=()
+
+while [ $# -gt 0 ]
+do
+    if [ "$1" == "--" ]
+    then
+        shift
+        app="$(basename "$1")"
+        shift
+        continue
+    fi
+
+    if [ -z "$app" ]
+    then
+        bwrap_args="${bwrap_args[@]} $1"
+    else
+        app_args="${app_args[@]} $1"
+    fi
+
+    shift
+done
+
+if [ -z "$app" ]
+then
+    echo
+    echo "Usage: $0 [bwrap args] -- <app> [app args]"
+    echo
+    exit 1
+fi 1>&2
+
+home="$HOME/tmp/$app"
+
+mkdir -p  "$home"
+chmod 700 "$home"
+
+set -x
+exec bwrap                                   \
+    --die-with-parent                        \
+    --ro-bind         /       /              \
+    --dev-bind        /dev    /dev           \
+    --bind            "$home" "$HOME"        \
+    ${bwrap_args[@]}  "$app"  ${app_args[@]}
