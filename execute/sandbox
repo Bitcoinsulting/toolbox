@@ -41,6 +41,8 @@ set -x
 exec bwrap                                   \
     --die-with-parent                        \
     --ro-bind         /       /              \
+    --tmpfs           /tmp                   \
+    --tmpfs           /run/user/$(id -u)     \
     --dev-bind        /dev    /dev           \
     --bind            "$home" "$HOME"        \
     ${bwrap_args[@]}  "$app"  ${app_args[@]}
