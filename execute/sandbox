@@ -43,6 +43,7 @@ exec bwrap                                   \
     --ro-bind         /       /              \
     --tmpfs           /tmp                   \
     --tmpfs           /run/user/$(id -u)     \
+    --tmpfs           /run/media/$(id -un)   \
     --dev-bind        /dev    /dev           \
     --bind            "$home" "$HOME"        \
     ${bwrap_args[@]}  "$app"  ${app_args[@]}
