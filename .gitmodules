@@ -1,0 +1,12 @@
+[submodule "nix/nix-employ"]
+	path = nix/nix-employ
+	url = https://github.com/corpix/nix-employ
+[submodule "nix/nix-cage"]
+	path = nix/nix-cage
+	url = https://github.com/corpix/nix-cage
+[submodule "sync/rsync-receiver"]
+	path = sync/rsync-receiver
+	url = https://github.com/corpix/rsync-receiver
+[submodule "golang/go-makefile"]
+	path = golang/go-makefile
+	url = https://github.com/corpix/go-makefile

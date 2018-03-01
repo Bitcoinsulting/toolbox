@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+from sys import stdin, stdout
+from json import load as json_unmarshal
+
+def convert(data, indent=4, current_indent=0):
+    if type(data) is str:
+        return '"' + data + '"'
+    if type(data) is int:
+        return str(data)
+    if type(data) is float:
+        return str(data)
+    if type(data) is bool:
+        return str(data).lower()
+
+    indentation = " " * current_indent
+    next_indentation = (indentation + (" " * indent))
+
+    if type(data) is list:
+        return indentation + "[\n" + "".join([
+            next_indentation + convert(
+                v,
+                indent=indent,
+                current_indent=current_indent+indent
+            ) + "\n"
+            for v in data
+        ]) + indentation + "]"
+    if type(data) is dict:
+        return indentation + "{\n" + "".join([
+            next_indentation + (k if k.isalnum() else '"' + k + '"') + " = " + convert(
+                v,
+                indent=indent,
+                current_indent=current_indent+indent
+            ).lstrip() + ";\n"
+            for k, v in data.items()
+        ]) + indentation + "}"
+
+    raise TypeError("Unknown type " + str(type(data)))
+
+stdout.write(
+    convert(
+        json_unmarshal(stdin)
+    ) + "\n")
