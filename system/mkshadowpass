@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+import sys
+from crypt import *
+
+p = sys.stdin.read().rstrip()
+sys.stdout.write(
+    crypt(
+        p,
+        METHOD_SHA512
+    )
+)
