@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -e
+
+{
+    ./fc00
+    ./hyperboria
+    ./meshwithme
+    ./smashnet
+} | jq -s add | python3 -c "$(cat <<EOF
+import sys
+import json
+
+allowed_keys = [
+  "password",
+  "publicKey",
+  "hostname",
+  "user",
+  "gpg",
+  "peerName",
+  "contact",
+  "location"
+]
+
+def remap_key(kk):
+  kk = kk.strip()
+  kk = kk[0].lower() + kk[1:]
+  if kk == "login":
+    return "user"
+  return kk
+
+data = json.loads(sys.stdin.read())
+sys.stdout.write(
+  json.dumps({
+    k: {
+      remap_key(kk): vv
+      for kk, vv in v.items()
+      if remap_key(kk) in allowed_keys
+    }
+    for k, v in data.items()
+  }) + "\n"
+)
+EOF
+)" | jq .

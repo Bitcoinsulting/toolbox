@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -e
+
+if [ ! -e meshwith.me.data ]
+then
+    curl -s https://pad.meshwith.me/p/public/export/txt > meshwith.me.data
+fi
+
+cat meshwith.me.data | python3 -c "$(cat <<EOF
+from json import loads, dumps
+from sys import stdin, stdout, stderr
+
+lines = [
+    v
+    for v in [
+            v.strip()
+            for v in stdin.read().split("\n")
+            if len(v.strip()) > 0
+    ]
+    if v[0] == '"' or v[0] == " " or v[0] == "}"
+]
+
+hosts = {}
+
+buf = []
+for line in lines:
+    buf.append(line)
+    if line[0] == "}":
+        try:
+            host = "{" + "".join(buf) + "}"
+            hosts.update(
+                loads(host)
+            )
+        except Exception as e:
+            stderr.write("Failed on {}\n".format(host))
+            raise e
+        buf = []
+
+
+stdout.write(dumps(hosts) + "\n")
+EOF
+)"

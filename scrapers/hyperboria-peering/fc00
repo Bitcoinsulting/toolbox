@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -e
+
+if [ ! -e fc00.data ]
+then
+    curl -s https://peers.fc00.io/1/location > fc00.data
+fi
+
+cat fc00.data | python3 -c "$(cat <<EOF
+from json import loads, dumps
+from sys import stdin, stdout, stderr
+
+hosts = {}
+
+for v in loads(stdin.read())["result"]:
+    for k, vv in v.items():
+        if k == "location":
+            continue
+        hosts[k] = vv
+
+stdout.write(dumps(hosts) + "\n")
+EOF
+)"
